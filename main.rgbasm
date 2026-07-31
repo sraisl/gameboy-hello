@@ -1,0 +1,78 @@
+INCLUDE "hardware.rgbinc"
+
+SECTION "Entry point", ROM0[$0100]
+    jp Start
+    ds $0150 - @, 0
+
+SECTION "Main", ROM0[$0150]
+Start:
+    di
+    ld sp, $DFFF
+
+    ; disable interrupts while setting up
+    xor a
+    ld [rIF], a
+    ld [rIE], a
+
+    ; wait for vblank so we can safely touch VRAM
+.waitVBlank:
+    ld a, [rLY]
+    cp 144
+    jr c, .waitVBlank
+
+    ; turn LCD off during VRAM write
+    xor a
+    ld [rLCDC], a
+
+    ; --- copy font tiles into VRAM at $8000 ---
+    ; Our font lives in ROM at FontChars. Tile 0 = space, ..., tile 8 = '!'
+    ld hl, FontChars
+    ld de, $8000
+    ld bc, FontCharsEnd - FontChars   ; byte count
+.copyFont:
+    ld a, [hl+]
+    ld [de], a
+    inc de
+    dec bc
+    ld a, b
+    or c
+    jr nz, .copyFont
+
+    ; --- build background tilemap ---
+    ; Background tilemap is at $9800 (we use LCDCF_BG9800).
+    ; Each entry = tile index. We write "HELLO WORLD!" centered-ish.
+    ld hl, Message
+    ld de, $9800 + 3*32 + 6   ; start at row 3, col 6 (a bit in from top-left)
+.writeMsg:
+    ld a, [hl+]
+    cp 0                       ; 0 = terminator
+    jr z, .msgDone
+    ld [de], a                 ; write tile index
+    inc de
+    jr .writeMsg
+.msgDone:
+
+    ; --- background palette: dark-on-light ---
+    ld a, %11100100
+    ld [rBGP], a
+
+    ; --- turn LCD on with background enabled, tilemap at $9800, tiles at $8000 ---
+    ld a, LCDCF_ON | LCDCF_BGON | LCDCF_BG9800 | LCDCF_BG8000
+    ld [rLCDC], a
+
+.mainLoop:
+    halt
+    nop
+    jr .mainLoop
+
+SECTION "Message", ROM0
+; tile indices: 0=space 1=H 2=E 3=L 4=O 5=W 6=R 7=D 8='!'
+Message:
+    db 1,2,3,3,4,0,5,4,6,3,7,8,0   ; "HELLO WORLD!"
+    db 0                           ; terminator
+
+SECTION "FontData", ROM0
+; font data is included here directly (no label — referenced via FontChars sym below)
+FontChars::
+INCLUDE "font.rgbasm"
+FontCharsEnd:

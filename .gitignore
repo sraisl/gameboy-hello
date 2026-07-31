@@ -1,0 +1,10 @@
+# Build artifacts
+*.o
+*.gb
+*.map
+*.sym
+*.png
+
+# Editor
+*.swp
+.DS_Store
