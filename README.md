@@ -9,7 +9,7 @@ Skill-Workflow.
 
 ```
 gameboy-hello/
-├── main.rgbasm        ; Entry point, VRAM-Setup, Tilemap-Schreiben, LCD-Enable
+├── main.rgbasm        ; Entry point, VRAM-Setup, Tilemap-Aufbau, LCD-Enable
 ├── font.rgbasm        ; 8x8 Pixel-Font (2bpp) für "HELLO WORLD!"
 ├── hardware.rgbinc    ; Game Boy Hardware-Register Definitionen
 ├── Makefile           ; RGBDS Build-Pipeline
@@ -19,7 +19,7 @@ gameboy-hello/
 ## Voraussetzungen
 
 - **RGBDS** (rgbasm, rgblink, rgbfix) — Assembly-Toolchain
-- **SameBoy** (oder jeder andere Game Boy Emulator) — zum Testen
+- **mGBA** (oder ein anderer Game-Boy-Emulator) — zum Testen
 
 ### Installation (Ubuntu/Debian)
 
@@ -27,16 +27,12 @@ gameboy-hello/
 # Build-Deps
 sudo apt-get update
 sudo apt-get install -y build-essential git bison flex \
-    pkg-config libpng-dev zlib1g-dev libsdl2-dev libepoxy-dev \
-    xvfb xauth
+    pkg-config libpng-dev zlib1g-dev
 
 # RGBDS aus Quellen bauen
 git clone https://github.com/gbdev/rgbds.git
 cd rgbds && make -j$(nproc) && sudo make install && cd ..
 
-# SameBoy (Emulator) bauen
-git clone https://github.com/LIJI32/SameBoy.git
-cd SameBoy && make CONF=release && sudo cp build/bin/SDL/sameboy /usr/local/bin/
 ```
 
 ## Bauen
@@ -57,45 +53,21 @@ rgbfix --title HELLO --pad-value 0 --validate game.gb
 `rgbfix --validate` prüft die ROM-Struktur (Header, Padding). Bei Erfolg:
 `game.gb: Game Boy ROM image: "HELLO" (Rev.00) [ROM ONLY]`.
 
-## Testen mit SameBoy
+## Testen mit mGBA
 
-SameBoy ist eine SDL-GUI-Anwendung. Auf einem Desktop einfach:
-
-```bash
-sameboy game.gb
-```
-
-Auf einem **Headless-Server** (ohne Display) nutzt man `xvfb`, um einen
-virtuellen Framebuffer bereitzustellen:
+Unter macOS mit installierter mGBA-App:
 
 ```bash
-xvfb-run -a sameboy game.gb
+open -a mGBA game.gb
 ```
 
-Das startet den Emulator; du solltest "HELLO WORLD!" auf schwarzem
-Hintergrund (hellgraue Schrift) sehen.
-
-### Screenshot erstellen (Headless)
-
-SameBoy speichert einen Screenshot, wenn man im Emulator-Fenster
-**F9** drückt (PNG in das aktuelle Verzeichnis). Headless geht das via
-xvfb + `xdotool`:
+Wenn das `mgba`-Programm im `PATH` liegt:
 
 ```bash
-xvfb-run -a bash -c '
-  sameboy game.gb &
-  SB=$!
-  sleep 3
-  xdotool key F9        # Screenshot auslösen
-  sleep 1
-  kill -TERM $SB
-  wait $SB
-'
-ls -la *.png            # sameboy_*.png
+mgba game.gb
 ```
 
-> Hinweis: Audio-Warnungen (`ALSA lib ... cannot find card`) unter headless
-> sind harmlos — der Emulator läuft trotzdem.
+Du solltest dunkle Schrift auf einem hellen Hintergrund sehen.
 
 ## Wie es funktioniert
 
@@ -103,19 +75,20 @@ ls -la *.png            # sameboy_*.png
 2. **Start**: Interrupts aus, Stack-Pointer setzen, auf VBlank warten
    (VRAM sicher beschreibbar).
 3. **Font kopieren**: Die 9 Glyphen (8x8, 2bpp) aus ROM → VRAM `$8000`.
-4. **Tilemap schreiben**: Die Tile-Indizes von `"HELLO WORLD!"` werden ab
-   `$9800 + 3*32 + 6` (Zeile 3, Spalte 6) in die Hintergrund-Tilemap
-   geschrieben.
+4. **Tilemap aufbauen**: Die Tilemap bei `$9800` wird gelöscht; danach werden
+   die Tile-Indizes von `"HELLO WORLD!"` ab `$9800 + 3*32 + 6`
+   (Zeile 3, Spalte 6) geschrieben.
 5. **LCD an**: `LCDC` mit BG-on, Tilemap/Tiles-Adressen, Palette
    `%11100100` (dunkel auf hell).
-6. **Main loop**: `halt` (Stromsparen), wartet auf NMI/Interrupt.
+6. **Main loop**: Eine Endlosschleife hält das statische Bild aktiv.
 
 ## Anpassen
 
 - **Text ändern**: In `main.rgbasm` den `Message:`-Block anpassen.
   Tile-Indizes: `0=space 1=H 2=E 3=L 4=O 5=W 6=R 7=D 8=!`.
+  `$FF` beendet die Nachricht.
   Neue Buchstaben in `font.rgbasm` ergänzen (16 Bytes pro Glyph,
-  2bpp: Bit 1 = dunkler Pixel).
+  zwei aufeinanderfolgende Bitplane-Bytes pro Pixelzeile).
 - **Position**: Start-Adresse `$9800 + row*32 + col` im `.writeMsg`-Block.
 - **Farbe**: `rBGP` Wert ändern (`%11100100` = dunkel auf hell,
   `%00011001` = hell auf dunkel).
@@ -124,7 +97,7 @@ ls -la *.png            # sameboy_*.png
 
 - [x] `make` läuft fehlerfrei durch (rgbasm -Weverything -Werror)
 - [x] `rgbfix --validate` meldet "ROM VALID"
-- [x] ROM lädt in SameBoy ohne "invalid ROM"-Fehler
+- [x] ROM lädt in mGBA 0.10.5 ohne ROM- oder Headerfehler
 - [x] Tilemap enthält korrekt decodiert "HELLO WORLD!"
 
 ## Lizenz

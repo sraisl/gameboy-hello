@@ -24,6 +24,19 @@ Start:
     xor a
     ld [rLCDC], a
 
+    ; reset scrolling and clear the complete $9800 background tilemap
+    ld [rSCX], a
+    ld [rSCY], a
+    ld hl, $9800
+    ld bc, 32 * 32
+.clearTilemap:
+    ld [hl], 0
+    inc hl
+    dec bc
+    ld a, b
+    or c
+    jr nz, .clearTilemap
+
     ; --- copy font tiles into VRAM at $8000 ---
     ; Our font lives in ROM at FontChars. Tile 0 = space, ..., tile 8 = '!'
     ld hl, FontChars
@@ -45,7 +58,7 @@ Start:
     ld de, $9800 + 3*32 + 6   ; start at row 3, col 6 (a bit in from top-left)
 .writeMsg:
     ld a, [hl+]
-    cp 0                       ; 0 = terminator
+    cp $FF                     ; $FF = terminator; tile 0 remains a space
     jr z, .msgDone
     ld [de], a                 ; write tile index
     inc de
@@ -61,18 +74,14 @@ Start:
     ld [rLCDC], a
 
 .mainLoop:
-    halt
-    nop
     jr .mainLoop
 
-SECTION "Message", ROM0
 ; tile indices: 0=space 1=H 2=E 3=L 4=O 5=W 6=R 7=D 8='!'
 Message:
-    db 1,2,3,3,4,0,5,4,6,3,7,8,0   ; "HELLO WORLD!"
-    db 0                           ; terminator
+    db 1, 2, 3, 3, 4, 0, 5, 4, 6, 3, 7, 8 ; "HELLO WORLD!"
+    db $FF                                  ; terminator
 
-SECTION "FontData", ROM0
-; font data is included here directly (no label — referenced via FontChars sym below)
+; Keep data in this section after the program so the interrupt vectors remain free.
 FontChars::
 INCLUDE "font.rgbasm"
 FontCharsEnd:
